@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>TDB - Timeless Debugger</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Courier New', monospace; 
+            background: #0a0a0a; 
+            color: #e0e0e0; 
+            overflow: hidden;
+        }
+        
+        /* QIRA-Style Layout */
+        #container { 
+            display: grid;
+            grid-template-rows: 45px 1fr;
+            height: 100vh;
+        }
+        
+        #header { 
+            background: linear-gradient(to right, #1a1a1a, #2a2a2a);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 2px solid #00ff00;
+            box-shadow: 0 2px 10px rgba(0,255,0,0.3);
+        }
+        
+        #header h1 { 
+            font-size: 20px;
+            font-weight: bold;
+            color: #00ff00;
+            text-shadow: 0 0 10px rgba(0,255,0,0.5);
+        }
+        
+        .header-stat {
+            background: rgba(0,255,0,0.1);
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid rgba(0,255,0,0.3);
+        }
+        
+        .header-stat-label { color: #888; margin-right: 5px; }
+        .header-stat-value { color: #00ff00; font-weight: bold; }
+        
+        #main-layout {
+            display: grid;
+            grid-template-columns: minmax(300px, 25%) 1fr minmax(350px, 30%);
+            height: 100%;
+            gap: 0;
+            background: #0a0a0a;
+        }
+        
+        /* Left: Timeline */
+        #timeline-panel {
+            background: #0f0f0f;
+            border-right: 1px solid #00ff00;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        #timeline-header {
+            padding: 10px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            font-size: 13px;
+            color: #00ff00;
+            font-weight: bold;
+        }
+        
+        #search-box {
+            padding: 8px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+        }
+        
+        #search-input {
+            width: 100%;
+            padding: 6px 10px;
+            background: #0a0a0a;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            font-family: inherit;
+            font-size: 11px;
+        }
+        
+        #search-input:focus {
+            outline: none;
+            box-shadow: 0 0 5px rgba(0,255,0,0.5);
+        }
+        
+        #timeline-list {
+            flex: 1;
+            overflow-y: auto;
+            background: #0f0f0f;
+        }
+        
+        .step {
+            padding: 4px 10px;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            font-size: 11px;
+            line-height: 16px;
+            transition: all 0.1s;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .step:hover {
+            background: #1a1a1a;
+            border-left-color: #00ff00;
+        }
+        
+        .step.active {
+            background: #1a3d1a;
+            border-left-color: #00ff00;
+            box-shadow: inset 0 0 10px rgba(0,255,0,0.2);
+        }
+        
+        .step.has-call { border-left-color: #00aaff; background: rgba(0,170,255,0.05); }
+        .step.has-return { border-left-color: #ff6600; background: rgba(255,102,0,0.05); }
+        .step.has-memchange { background: rgba(255,255,0,0.03); }
+        
+        .step-num { color: #666; width: 60px; flex-shrink: 0; }
+        .step-addr { color: #00aaff; width: 100px; flex-shrink: 0; font-weight: bold; }
+        .step-insn { color: #e0e0e0; flex: 1; }
+        .step-marker { color: #00ff00; font-weight: bold; margin-right: 5px; }
+        
+        /* Center: Disassembly View */
+        #disasm-panel {
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        #disasm-header {
+            padding: 15px 20px;
+            background: #1a1a1a;
+            border-bottom: 2px solid #00ff00;
+        }
+        
+        #current-pc {
+            font-size: 14px;
+            color: #00aaff;
+            margin-bottom: 8px;
+        }
+        
+        #current-insn {
+            font-size: 24px;
+            color: #00ff00;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-shadow: 0 0 5px rgba(0,255,0,0.3);
+        }
+        
+        #insn-bytes {
+            font-size: 12px;
+            color: #888;
+            letter-spacing: 1px;
+        }
+        
+        #disasm-context {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .context-section {
+            margin-bottom: 25px;
+        }
+        
+        .context-title {
+            color: #00ff00;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .context-line {
+            padding: 5px 0;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .context-label { color: #888; }
+        .context-value { color: #e0e0e0; font-family: 'Courier New', monospace; }
+        
+        /* Right: Memory & Registers */
+        #right-panel {
+            background: #0f0f0f;
+            border-left: 1px solid #00ff00;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .panel-section {
+            border-bottom: 1px solid #333;
+        }
+        
+        .panel-header {
+            padding: 10px 15px;
+            background: #1a1a1a;
+            color: #00ff00;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-content {
+            padding: 15px;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+        
+        #registers-section { flex: 0 0 auto; }
+        #memory-section { flex: 1; }
+        
+        .reg-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .reg-item {
+            display: flex;
+            font-size: 11px;
+            line-height: 18px;
+        }
+        
+        .reg-name {
+            color: #00aaff;
+            width: 45px;
+            font-weight: bold;
+        }
+        
+        .reg-val {
+            color: #e0e0e0;
+            flex: 1;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .reg-changed {
+            color: #ffff00;
+            font-weight: bold;
+            animation: highlight 0.5s;
+        }
+        
+        @keyframes highlight {
+            0% { background: rgba(255,255,0,0.3); }
+            100% { background: transparent; }
+        }
+        
+        .mem-entry {
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(0,255,0,0.05);
+            border-left: 2px solid #00ff00;
+            font-size: 11px;
+        }
+        
+        .mem-addr {
+            color: #00aaff;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .mem-change {
+            color: #e0e0e0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .mem-old { color: #ff6600; }
+        .mem-new { color: #00ff00; font-weight: bold; }
+        .mem-arrow { color: #888; }
+        
+        .empty-state {
+            color: #666;
+            font-style: italic;
+            font-size: 11px;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        /* Controls */
+        #controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 12px 20px;
+            background: #1a1a1a;
+            border-top: 2px solid #00ff00;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            box-shadow: 0 -2px 10px rgba(0,255,0,0.2);
+        }
+        
+        button {
+            background: linear-gradient(to bottom, #00ff00, #00cc00);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: linear-gradient(to bottom, #00ff66, #00ff00);
+            box-shadow: 0 0 10px rgba(0,255,0,0.5);
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        #step-input {
+            width: 100px;
+            padding: 8px;
+            background: #0a0a0a;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            font-family: inherit;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+        
+        #status-display {
+            margin-left: auto;
+            color: #888;
+            font-size: 11px;
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #00ff00; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00ff66; }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #00ff00;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="header">
+            <h1>⚡ TDB - Timeless Debugger</h1>
+            <div class="header-stat">
+                <span class="header-stat-label">STEPS:</span>
+                <span class="header-stat-value" id="total-steps">0</span>
+            </div>
+            <div class="header-stat">
+                <span class="header-stat-label">CURRENT:</span>
+                <span class="header-stat-value" id="current-step-header">0</span>
+            </div>
+            <div class="header-stat">
+                <span class="header-stat-label">ARCH:</span>
+                <span class="header-stat-value" id="arch-display">...</span>
+            </div>
+            <div class="header-stat">
+                <span class="header-stat-label">CALLS:</span>
+                <span class="header-stat-value" id="calls-count">0</span>
+            </div>
+            <div class="header-stat">
+                <span class="header-stat-label">MEM CHANGES:</span>
+                <span class="header-stat-value" id="mem-total">0</span>
+            </div>
+        </div>
+        
+        <div id="main-layout">
+            <!-- LEFT: Timeline -->
+            <div id="timeline-panel">
+                <div id="timeline-header">EXECUTION TIMELINE</div>
+                <div id="search-box">
+                    <input type="text" id="search-input" placeholder="Filter: call, ret, str, mov..." oninput="searchTrace()">
+                </div>
+                <div id="timeline-list">
+                    <div class="loading">Loading trace...</div>
+                </div>
+            </div>
+            
+            <!-- CENTER: Disassembly -->
+            <div id="disasm-panel">
+                <div id="disasm-header">
+                    <div id="current-pc">PC: 0x0000000000000000</div>
+                    <div id="current-insn">Loading...</div>
+                    <div id="insn-bytes">00 00 00 00</div>
+                </div>
+                <div id="disasm-context">
+                    <div class="context-section">
+                        <div class="context-title">📊 EXECUTION INFO</div>
+                        <div class="context-line">
+                            <span class="context-label">Step Number:</span>
+                            <span class="context-value" id="step-display">0</span>
+                        </div>
+                        <div class="context-line">
+                            <span class="context-label">Progress:</span>
+                            <span class="context-value" id="progress-display">0%</span>
+                        </div>
+                        <div class="context-line">
+                            <span class="context-label">Instruction Type:</span>
+                            <span class="context-value" id="insn-type">Normal</span>
+                        </div>
+                    </div>
+                    
+                    <div class="context-section" id="call-info" style="display:none">
+                        <div class="context-title">📞 FUNCTION CALL INFO</div>
+                        <div id="call-details"></div>
+                    </div>
+                    
+                    <div class="context-section" id="stack-info">
+                        <div class="context-title">📚 STACK POINTER</div>
+                        <div class="context-line">
+                            <span class="context-label">Current SP:</span>
+                            <span class="context-value" id="sp-display">0x0</span>
+                        </div>
+                        <div class="context-line">
+                            <span class="context-label">Stack Delta:</span>
+                            <span class="context-value" id="sp-delta">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RIGHT: Registers & Memory -->
+            <div id="right-panel">
+                <div id="registers-section" class="panel-section">
+                    <div class="panel-header">
+                        <span>REGISTERS</span>
+                        <span id="reg-count">0 regs</span>
+                    </div>
+                    <div class="panel-content" id="registers-content">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+                
+                <div id="memory-section" class="panel-section">
+                    <div class="panel-header">
+                        <span>MEMORY CHANGES</span>
+                        <span id="mem-count">0 changes</span>
+                    </div>
+                    <div class="panel-content" id="memory-content">
+                        <div class="empty-state">No memory changes at this step</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="controls">
+            <button onclick="jumpToStart()" title="Home">⏮ First</button>
+            <button onclick="prevStep()" title="Left Arrow">← Prev</button>
+            <button onclick="nextStep()" title="Right Arrow">Next →</button>
+            <button onclick="jumpToEnd()" title="End">Last ⏭</button>
+            <input type="number" id="step-input" placeholder="Jump to step..." onkeypress="if(event.key==='Enter')gotoStep()">
+            <button onclick="gotoStep()">→ Go</button>
+            <span style="border-left: 2px solid #333; height: 24px; margin: 0 10px;"></span>
+            <button onclick="findNext('call')">🔍 Next Call</button>
+            <button onclick="findNext('ret')">🔍 Next Return</button>
+            <button onclick="findNext('memchange')">🔍 Next MemChange</button>
+            <button onclick="exportTrace()">💾 Export JSON</button>
+            <div id="status-display">Ready</div>
+        </div>
+    </div>
+    
+    <script>
+        let trace = [];
+        let currentStep = 0;
+        let architecture = 'unknown';
+        let lastRegs = null;
+        let firstSP = null;
+        let callCount = 0;
+        let memChangeTotal = 0;
+        
+        async function loadTrace() {
+            try {
+                document.getElementById('status-display').textContent = 'Loading trace data...';
+                const res = await fetch('/api/trace');
+                const data = await res.json();
+                trace = data.entries;
+                
+                if (trace.length === 0) {
+                    document.getElementById('timeline-list').innerHTML = '<div class="empty-state">No trace data</div>';
+                    return;
+                }
+                
+                // Detect architecture
+                const firstRegs = JSON.parse(trace[0].regs);
+                architecture = firstRegs.rax !== undefined ? 'x86_64' : 'arm64';
+                document.getElementById('arch-display').textContent = architecture.toUpperCase();
+                
+                // Count calls and memory changes
+                callCount = trace.filter(e => 
+                    e.insn_text.includes('CALL') || 
+                    e.insn_text.includes('bl ') || 
+                    e.insn_text.includes('blr') ||
+                    e.insn_text.includes('RETURN') ||
+                    e.insn_text.includes('ret')
+                ).length;
+                
+                memChangeTotal = trace.reduce((sum, e) => 
+                    sum + (e.mem_changes ? e.mem_changes.length : 0), 0
+                );
+                
+                document.getElementById('total-steps').textContent = data.total.toLocaleString();
+                document.getElementById('calls-count').textContent = callCount;
+                document.getElementById('mem-total').textContent = memChangeTotal;
+                
+                renderTimeline();
+                showStep(0);
+                document.getElementById('status-display').textContent = `Loaded ${data.total} steps`;
+            } catch (e) {
+                document.getElementById('status-display').textContent = 'Error: ' + e.message;
+                console.error(e);
+            }
+        }
+        
+        function renderTimeline() {
+            const html = trace.map((e, i) => {
+                const hasCall = e.insn_text.includes('CALL') || e.insn_text.includes('bl ') || e.insn_text.includes('blr');
+                const hasReturn = e.insn_text.includes('RETURN') || e.insn_text.includes('ret');
+                const hasMemChange = e.mem_changes && e.mem_changes.length > 0;
+                
+                const classes = ['step'];
+                if (hasCall) classes.push('has-call');
+                if (hasReturn) classes.push('has-return');
+                if (hasMemChange) classes.push('has-memchange');
+                
+                let marker = '';
+                if (hasCall) marker = '<span class="step-marker">→</span>';
+                if (hasReturn) marker = '<span class="step-marker">←</span>';
+                
+                return `<div class="${classes.join(' ')}" onclick="showStep(${i})" id="step-${i}" data-insn="${e.insn_text.toLowerCase()}">
+                    <span class="step-num">#${e.step}</span>
+                    <span class="step-addr">0x${e.pc.toString(16).padStart(12, '0')}</span>
+                    <span class="step-insn">${marker}${e.insn_text}</span>
+                </div>`;
+            }).join('');
+            
+            document.getElementById('timeline-list').innerHTML = html;
+        }
+        
+        function showStep(idx) {
+            if (idx < 0 || idx >= trace.length) return;
+            currentStep = idx;
+            const entry = trace[idx];
+            
+            // Update active state
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            const stepEl = document.getElementById(`step-${idx}`);
+            if (stepEl) {
+                stepEl.classList.add('active');
+                stepEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+            
+            // Parse registers
+            const regs = JSON.parse(entry.regs);
+            if (!firstSP) {
+                firstSP = architecture === 'x86_64' ? regs.rsp : regs.sp;
+            }
+            const currentSP = architecture === 'x86_64' ? regs.rsp : regs.sp;
+            const spDelta = currentSP - firstSP;
+            
+            // Update header
+            document.getElementById('current-step-header').textContent = entry.step;
+            
+            // Update disassembly header
+            document.getElementById('current-pc').textContent = `PC: 0x${entry.pc.toString(16).toUpperCase().padStart(16, '0')}`;
+            document.getElementById('current-insn').textContent = entry.insn_text;
+            document.getElementById('insn-bytes').textContent = entry.insn_bytes.map(b => 
+                b.toString(16).padStart(2, '0').toUpperCase()
+            ).join(' ');
+            
+            // Update context info
+            document.getElementById('step-display').textContent = entry.step.toLocaleString();
+            document.getElementById('progress-display').textContent = 
+                Math.round((idx / trace.length) * 100) + '%';
+            
+            // Detect instruction type
+            let insnType = 'Normal Instruction';
+            if (entry.insn_text.includes('CALL')) insnType = '📞 FUNCTION CALL';
+            else if (entry.insn_text.includes('RETURN')) insnType = '↩️ FUNCTION RETURN';
+            else if (entry.insn_text.includes('bl ') || entry.insn_text.includes('blr')) insnType = '📞 BRANCH & LINK';
+            else if (entry.insn_text.includes('ret')) insnType = '↩️ RETURN';
+            else if (entry.insn_text.startsWith('j') || entry.insn_text.startsWith('b')) insnType = '↪️ BRANCH/JUMP';
+            else if (entry.insn_text.includes('str') || entry.insn_text.includes('st')) insnType = '💾 STORE TO MEMORY';
+            else if (entry.insn_text.includes('ldr') || entry.insn_text.includes('ld') || entry.insn_text.includes('mov')) insnType = '📥 LOAD/MOVE';
+            
+            document.getElementById('insn-type').textContent = insnType;
+            
+            // Update stack info
+            document.getElementById('sp-display').textContent = '0x' + currentSP.toString(16).toUpperCase();
+            document.getElementById('sp-delta').textContent = (spDelta >= 0 ? '+' : '') + spDelta + ' bytes';
+            
+            // Update registers with change highlighting
+            const regHtml = Object.entries(regs).map(([name, val]) => {
+                const changed = lastRegs && lastRegs[name] !== undefined && lastRegs[name] !== val;
+                const valClass = changed ? 'reg-val reg-changed' : 'reg-val';
+                return `<div class="reg-item">
+                    <span class="reg-name">${name.toUpperCase()}</span>
+                    <span class="${valClass}">0x${val.toString(16).toUpperCase().padStart(16, '0')}</span>
+                </div>`;
+            }).join('');
+            
+            document.getElementById('registers-content').innerHTML = `<div class="reg-grid">${regHtml}</div>`;
+            document.getElementById('reg-count').textContent = Object.keys(regs).length + ' regs';
+            lastRegs = regs;
+            
+            // Update memory changes
+            if (entry.mem_changes && entry.mem_changes.length > 0) {
+                const memHtml = entry.mem_changes.map(change => `
+                    <div class="mem-entry">
+                        <div class="mem-addr">0x${change.addr.toString(16).toUpperCase().padStart(16, '0')}</div>
+                        <div class="mem-change">
+                            <span class="mem-old">0x${change.old_val.toString(16).padStart(2, '0')}</span>
+                            <span class="mem-arrow">→</span>
+                            <span class="mem-new">0x${change.new_val.toString(16).padStart(2, '0')}</span>
+                            <span style="color:#666;margin-left:10px">'${String.fromCharCode(change.new_val).replace(/[^\x20-\x7E]/g, '.')}'</span>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('memory-content').innerHTML = memHtml;
+                document.getElementById('mem-count').textContent = entry.mem_changes.length + ' changes';
+            } else {
+                document.getElementById('memory-content').innerHTML = '<div class="empty-state">No memory changes at this step</div>';
+                document.getElementById('mem-count').textContent = '0 changes';
+            }
+            
+            document.getElementById('step-input').value = entry.step;
+        }
+        
+        function nextStep() { showStep(currentStep + 1); }
+        function prevStep() { showStep(currentStep - 1); }
+        function jumpToStart() { showStep(0); }
+        function jumpToEnd() { showStep(trace.length - 1); }
+        
+        function gotoStep() {
+            const step = parseInt(document.getElementById('step-input').value);
+            const idx = trace.findIndex(e => e.step === step);
+            if (idx >= 0) {
+                showStep(idx);
+            } else {
+                alert('Step ' + step + ' not found');
+            }
+        }
+        
+        function findNext(type) {
+            for (let i = currentStep + 1; i < trace.length; i++) {
+                const entry = trace[i];
+                if (type === 'call' && (entry.insn_text.includes('CALL') || entry.insn_text.includes('bl ') || entry.insn_text.includes('blr'))) {
+                    showStep(i);
+                    return;
+                }
+                if (type === 'ret' && (entry.insn_text.includes('RETURN') || entry.insn_text.includes('ret'))) {
+                    showStep(i);
+                    return;
+                }
+                if (type === 'memchange' && entry.mem_changes && entry.mem_changes.length > 0) {
+                    showStep(i);
+                    return;
+                }
+            }
+            alert('No more ' + type + ' found');
+        }
+        
+        function searchTrace() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            let visibleCount = 0;
+            document.querySelectorAll('.step').forEach(el => {
+                if (!query || el.dataset.insn.includes(query)) {
+                    el.style.display = 'flex';
+                    visibleCount++;
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+            document.getElementById('status-display').textContent = 
+                query ? `${visibleCount} steps match "${query}"` : `${trace.length} steps`;
+        }
+        
+        function exportTrace() {
+            const dataStr = JSON.stringify({
+                architecture,
+                total_steps: trace.length,
+                calls: callCount,
+                memory_changes: memChangeTotal,
+                trace: trace
+            }, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', 'tdb_trace_' + Date.now() + '.json');
+            linkElement.click();
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT') return;
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                case 'h':
+                    prevStep();
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                case 'l':
+                    nextStep();
+                    e.preventDefault();
+                    break;
+                case 'Home':
+                case 'g':
+                    jumpToStart();
+                    e.preventDefault();
+                    break;
+                case 'End':
+                case 'G':
+                    jumpToEnd();
+                    e.preventDefault();
+                    break;
+                case 'c':
+                    findNext('call');
+                    break;
+                case 'r':
+                    findNext('ret');
+                    break;
+                case 'm':
+                    findNext('memchange');
+                    break;
+                case '/':
+                    document.getElementById('search-input').focus();
+                    e.preventDefault();
+                    break;
+            }
+        });
+        
+        // Load trace on page load
+        loadTrace();
+    </script>
+</body>
+</html>
