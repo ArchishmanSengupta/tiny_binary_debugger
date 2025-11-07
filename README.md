@@ -1,5 +1,7 @@
 # TDB
 
+<img width="1919" height="1037" alt="Screenshot 2025-11-08 at 3 16 06 AM" src="https://github.com/user-attachments/assets/4f7ac48d-a0f9-4ddb-98f1-c8cc40b33807" />
+
 Timeless debugger for macOS. Records complete execution trace.
 
 ## Build
