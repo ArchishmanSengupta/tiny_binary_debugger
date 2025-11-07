@@ -1,0 +1,6 @@
+target/
+Cargo.lock
+*.tdb
+test_program
+*.dSYM
+.DS_Store
