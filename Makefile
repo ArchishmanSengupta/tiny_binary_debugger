@@ -1,16 +1,21 @@
-.PHONY: build release test examples clean run-test help
+.PHONY: build release test examples clean run-test help install uninstall check fmt clippy sign
 
 help:
 	@echo "TDB - Timeless Debugger for macOS"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build      - Build debug version"
-	@echo "  release    - Build optimized release version"
+	@echo "  release    - Build optimized release version (auto-signs with entitlements)"
 	@echo "  test       - Build test programs"
 	@echo "  examples   - Build example programs"
 	@echo "  clean      - Remove build artifacts"
 	@echo "  run-test   - Run test program"
+	@echo "  install    - Install to /usr/local/bin"
 	@echo "  help       - Show this help"
+	@echo ""
+	@echo "Quick start:"
+	@echo "  make release"
+	@echo "  sudo ./target/release/tdb run python3 examples/hello.py trace.tdb"
 
 build:
 	cargo build
@@ -18,7 +23,13 @@ build:
 release:
 	cargo build --release
 	@echo ""
-	@echo "Binary: ./target/release/tdb"
+	@echo "Signing binary with entitlements..."
+	codesign -s - --entitlements entitlements.plist -f ./target/release/tdb
+	@echo ""
+	@echo "✅ Binary built and signed: ./target/release/tdb"
+	@echo ""
+	@echo "Quick start:"
+	@echo "  sudo ./target/release/tdb run python3 examples/hello.py trace.tdb"
 
 test: test_program examples
 
@@ -52,4 +63,9 @@ fmt:
 
 clippy:
 	cargo clippy
+
+sign:
+	@echo "Signing binary with entitlements..."
+	codesign -s - --entitlements entitlements.plist -f ./target/release/tdb
+	@echo "✅ Binary signed successfully"
 

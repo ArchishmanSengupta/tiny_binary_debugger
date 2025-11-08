@@ -4,7 +4,6 @@ use capstone::prelude::*;
 use std::sync::Arc;
 use std::collections::HashMap;
 
-// Trait to abstract register access for both architectures
 trait MemoryState {
     fn get_sp(&self) -> u64;
     #[cfg(target_arch = "aarch64")]
@@ -89,7 +88,6 @@ impl Tracer {
         #[cfg(target_arch = "aarch64")]
         let (pc, sp) = (state.pc, state.sp);
         
-        // Initialize last_sp on first step
         if self.last_sp == 0 {
             self.last_sp = sp;
         }
@@ -104,7 +102,6 @@ impl Tracer {
         let operands = insn.op_str().unwrap_or("");
         let insn_text = format!("{} {}", mnemonic, operands);
         
-        // Detect function calls and returns
         let mut insn_type = String::new();
         #[cfg(target_arch = "x86_64")]
         {
@@ -127,10 +124,8 @@ impl Tracer {
             }
         }
         
-        // Track memory changes by checking stack and common memory regions
         let mut mem_changes = Vec::new();
         
-        // Monitor stack changes (check 256 bytes around SP)
         if sp != self.last_sp || mnemonic.contains("str") || mnemonic.contains("st") 
            || mnemonic.contains("push") || mnemonic.contains("pop") {
             let stack_check_size = 256;
@@ -152,9 +147,7 @@ impl Tracer {
             }
         }
         
-        // Track heap writes (for store instructions, try to read target address)
         if mnemonic.contains("str") || mnemonic.contains("st") || mnemonic.contains("mov") {
-            // Try to extract memory address from operands
             if let Some(addr) = self.extract_memory_address(&state, &operands) {
                 if let Ok(new_val) = self.task.read_memory(addr, 1) {
                     if let Some(old_data) = self.memory_cache.get(&(addr & !0xFF)) {
@@ -193,7 +186,6 @@ impl Tracer {
             "pc": state.pc, "cpsr": state.cpsr,
         });
         
-        // Add instruction type to the text if it's a call/return
         let full_insn_text = if !insn_type.is_empty() {
             format!("{} ; {}", insn_text, insn_type)
         } else {
@@ -220,7 +212,6 @@ impl Tracer {
     }
     
     fn extract_memory_address(&self, state: &impl MemoryState, operands: &str) -> Option<u64> {
-        // Simple parser for ARM64/x86_64 memory operands like [x0], [rax+0x10], etc.
         #[cfg(target_arch = "aarch64")]
         {
             if operands.contains("[x0]") { return Some(state.get_x0()); }

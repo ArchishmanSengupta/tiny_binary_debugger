@@ -68,26 +68,28 @@ async fn main() {
 
 fn run_and_trace(program: &str, args: &[String], output: &str) {
     println!("Launching: {} {}", program, args.join(" "));
-    let launcher = launcher::ProcessLauncher::launch(program, args)
+    let mut launcher = launcher::ProcessLauncher::launch(program, args)
         .expect("Failed to launch program");
     
-    println!("Process started with PID: {}", launcher.pid);
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    println!("Process started with PID: {} (paused)", launcher.pid);
     
-    trace_process(launcher.pid, output, Some(&launcher));
+    trace_process(launcher.pid, output, Some(&mut launcher));
 }
 
-fn trace_process(pid: i32, output: &str, launcher: Option<&launcher::ProcessLauncher>) {
+fn trace_process(pid: i32, output: &str, mut launcher: Option<&mut launcher::ProcessLauncher>) {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║           TDB - Timeless Debugger for macOS                 ║");
     println!("╚══════════════════════════════════════════════════════════════╝\n");
     
     println!("📍 Attaching to process PID: {}", pid);
     
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    
     let mut tracer = tracer::Tracer::new(pid, output)
         .expect("Failed to create tracer");
+
+    if let Some(l) = launcher.as_mut() {
+        l.resume().expect("Failed to resume process");
+        println!("✅ Tracer attached, process resumed\n");
+    }
 
     let auto_stop = launcher.is_some();
     
@@ -112,7 +114,7 @@ fn trace_process(pid: i32, output: &str, launcher: Option<&launcher::ProcessLaun
     
     loop {
         if auto_stop {
-            if let Some(l) = launcher {
+            if let Some(ref l) = launcher {
                 if !l.is_running() {
                     println!("╰─────────┴──────────────────┴────────────────────────────────────╯");
                     println!("\n✅ Process exited normally");
@@ -125,7 +127,6 @@ fn trace_process(pid: i32, output: &str, launcher: Option<&launcher::ProcessLaun
             Ok(entry) => {
                 error_count = 0;
                 
-                // Count interesting events
                 if entry.insn_text.contains("CALL") || entry.insn_text.contains("bl ") || entry.insn_text.contains("blr") {
                     call_count += 1;
                 }
@@ -136,7 +137,6 @@ fn trace_process(pid: i32, output: &str, launcher: Option<&launcher::ProcessLaun
                     mem_change_count += entry.mem_changes.len();
                 }
                 
-                // Print progress every 1000 steps or on interesting events
                 let is_call = entry.insn_text.contains("CALL") || entry.insn_text.contains("bl ");
                 let is_return = entry.insn_text.contains("RETURN") || entry.insn_text.contains("ret");
                 let has_mem_change = !entry.mem_changes.is_empty();
