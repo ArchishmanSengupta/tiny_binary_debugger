@@ -1,6 +1,8 @@
 target/
-Cargo.lock
 *.tdb
 test_program
+examples/fast_test
+examples/test_calls
+examples/vulnerable
 *.dSYM
 .DS_Store
